@@ -1,4 +1,4 @@
-"""Telegram finance bot""" 
+"""Telegram finance bot"""
 
 # importing all requirements
 import requests
@@ -7,56 +7,58 @@ from telegram import KeyboardButton, ReplyKeyboardMarkup
 from pathlib import Path
 import json
 from datetime import datetime
+from typing import Union
 
 # here we are getting out token and creating updater
-token = Path.cwd() / 'token.txt'
-data = token.open('r')
-TOKEN = data.read()
-data.close()
+with open(Path.cwd() / 'token.txt', 'r') as file:
+    TOKEN = file.read()
 updater = Updater(TOKEN)
+
+# current date must represent a date from which we want to get currency rate
 current_date = str(datetime.now())[:10].split('-')
 
 # buttons for currency
-list_of_buttons = [[KeyboardButton('USD')], [KeyboardButton('AUD')], 
+list_of_buttons = [[KeyboardButton('USD')], [KeyboardButton('AUD')],
                    [KeyboardButton('RUB')], [KeyboardButton('EUR')],
                    [KeyboardButton('RON')], [KeyboardButton('SGD')],
                    [KeyboardButton('NOK')], [KeyboardButton('PLN')],
-                   [KeyboardButton('TRY')], [KeyboardButton('XPD')], 
+                   [KeyboardButton('TRY')], [KeyboardButton('XPD')],
                    [KeyboardButton('LYD')], ]
 
-# all available currency 
+# all available currency
 values = ('USD', 'AUD', 'RUB', 'EUR', 'RON', 'SGD', 'NOK', 'PLN', 'TRY', 'XPD', 'LYD')
 
 
 # start command of this bot
-def start_bot(update, context):
+def start_bot(update, context) -> None:
     chat = update.effective_chat
     user_name = update.message.chat.first_name
     buttons = list_of_buttons
     context.bot.send_message(chat_id=chat.id, text=f'Hi there, {user_name}! I am a finance bot! '
-                             'Here you will know all about currency rate! Type /help for more info',
+                                                   'Here you will know all about currency rate! '
+                                                   'Type /help for more info',
                              reply_markup=ReplyKeyboardMarkup(buttons))
 
 
 # help command of this bot
-def helper(update, context):
+def helper(update, context) -> None:
     chat = update.effective_chat
     context.bot.send_message(chat_id=chat.id, text="""
-1) If you want to know current rate of currency
-just click on buttons below 👇
-2) If you want to know another rate of currency in
-previous years just type something like 2007 or 2018 etc.
-                Enjoy 💰""")
+        1) If you want to know current rate of currency
+        just click on buttons below 👇
+        2) If you want to know another rate of currency in
+        previous years just type something like 2007 or 2018 etc.
+                     Enjoy 💰""")
 
 
-def load_file_data(new_data):
+def load_file_data(new_data) -> None:
     path = Path('data.json')
-    data = json.loads(path.read_text(encoding='utf-8'))
-    data["info"].append(new_data)
-    path.write_text(json.dumps(data, indent=4), encoding='utf-8')
+    file_data = json.loads(path.read_text(encoding='utf-8'))
+    file_data["info"].append(new_data)
+    path.write_text(json.dumps(file_data, indent=4), encoding='utf-8')
 
 
-def save_info(user_name, bot_message: list, time, user_message):
+def save_info(user_name, bot_message: list, time, user_message) -> None:
     new_data = {'user_name': user_name,
                 'user_message': user_message,
                 'bot_message': bot_message,
@@ -65,18 +67,25 @@ def save_info(user_name, bot_message: list, time, user_message):
 
 
 # get current currency rate
-def get_currency_rate(currency_code):
-    return requests.get(f'https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode'
-                                    f'={currency_code}&date={current_date[0]}{current_date[1]}{current_date[2]}&json').json()
+def get_currency_rate(currency_code: str) -> Union[list, str]:
+    response = requests.get(f'https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode'
+                            f'={currency_code}&date={current_date[0]}{current_date[1]}{current_date[2]}&json')
+    if response.ok:
+        return response.json()
+    return 'Bad response!'
 
 
 # get previous currency rate
-def get_previous_currency_rate(item, currency_code):
-    return requests.get(f'https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode={item}&date={currency_code}{current_date[1]}{current_date[2]}&json').json()
+def get_previous_currency_rate(item: str, currency_code: str) -> Union[list, str]:
+    response = requests.get('https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode='
+                            f'{item}&date={currency_code}{current_date[1]}{current_date[2]}&json')
+    if response.ok:
+        return response.json()
+    return 'Bad response!'
 
 
 # getting and reproducing currency rate from https://bank.gov.ua
-def currency_rate(update, context):
+def currency_rate(update, context) -> None:
     chat = update.effective_chat
     currency_code = update.message.text
     user_name = update.message.chat.first_name
@@ -98,19 +107,23 @@ def currency_rate(update, context):
                 currency.append(message)
             except (IndexError, KeyError):
                 context.bot.send_message(chat_id=chat.id, text=f'There is no info about {item} 😪')
-                continue
         save_info(user_name, currency, datetime.now().strftime('%A-%d-%B-%Y %H:%M:%S'), currency_code)
 
     else:
         context.bot.send_message(chat_id=chat.id, text='Invalid input!!!')
 
 
-# creating dispatcher
-disp = updater.dispatcher
-disp.add_handler(CommandHandler('start', start_bot))
-disp.add_handler(CommandHandler('help', helper))
-disp.add_handler(MessageHandler(Filters.all, currency_rate))
+def main():
+    # creating dispatcher
+    disp = updater.dispatcher
+    disp.add_handler(CommandHandler('start', start_bot))
+    disp.add_handler(CommandHandler('help', helper))
+    disp.add_handler(MessageHandler(Filters.all, currency_rate))
 
-# starting our bot
-updater.start_polling()
-updater.idle()
+    # starting our bot
+    updater.start_polling()
+    updater.idle()
+
+
+if __name__ == '__main__':
+    main()
